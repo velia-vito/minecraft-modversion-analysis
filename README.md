@@ -475,28 +475,32 @@ Use a JSON validator like https://jsonlint.com/ to check your config.
 
 ### Architecture
 
-The script runs in 4 phases, all using maximum parallelism:
+The script runs in 4 stages, all using maximum parallelism. Each stage is clearly shown in the output with timing:
 
-1. **Phase 1 — Parallel Search** (`os.cpu_count()` threads)
-   - Searches Modrinth for every mod in your list simultaneously
-   - Uses a 6-tier matching algorithm to find the best match
-   - Detects wrong-loader mods and reports them
-   - Automatic retry with exponential backoff on rate limits (429)
+**STAGE 1 — Parallel Search** (`os.cpu_count()` threads)
+- Searches Modrinth for every mod in your list simultaneously
+- Uses a 6-tier matching algorithm to find the best match
+- Detects wrong-loader mods and reports them
+- Automatic retry with exponential backoff on rate limits (429)
+- **Output:** `✓ STAGE 1 COMPLETE: 1.4s (N found, M not found)`
 
-2. **Phase 2 — Parallel Version Fetch** (`os.cpu_count()` threads)
-   - Fetches all available versions for each found mod
-   - Fetches project metadata (client/server side info)
-   - Collects dependency project IDs for Phase 3
+**STAGE 2 — Parallel Version Fetch** (`os.cpu_count()` threads)
+- Fetches all available versions for each found mod
+- Fetches project metadata (client/server side info)
+- Collects dependency project IDs for Stage 3
+- **Output:** `✓ STAGE 2 COMPLETE: 1.0s (N mods, M deps queued)`
 
-3. **Phase 3 — BFS Dependency Resolution** (bulk API + parallel)
-   - Uses breadth-first search to discover all transitive dependencies
-   - Bulk-fetches project metadata using `/projects?ids=[...]`
-   - Parallel version fetching for dependency waves
+**STAGE 3 — BFS Dependency Resolution** (bulk API + parallel)
+- Uses breadth-first search to discover all transitive dependencies
+- Bulk-fetches project metadata using `/projects?ids=[...]`
+- Parallel version fetching for dependency waves
+- **Output:** `✓ STAGE 3 COMPLETE: 1.4s`
 
-4. **Analysis** (parallel per MC version)
-   - Evaluates top 5 MC version candidates concurrently
-   - For each version: builds install plan, searches for alt-projects in parallel, detects conflicts
-   - Selects the best version (most mods compatible, latest MC)
+**STAGE 4 — Analysis** (parallel per MC version)
+- Evaluates top 5 MC version candidates concurrently
+- For each version: builds install plan, searches for alt-projects in parallel, detects conflicts
+- Selects the best version (most mods compatible, latest MC)
+- **Output:** `✓ STAGE 4 COMPLETE: 0.0s` → `TOTAL TIME: 3.7s`
 
 ### API Usage
 
@@ -510,15 +514,16 @@ The script runs in 4 phases, all using maximum parallelism:
 
 ## Files in This Project
 
-| File | Description |
+| File/Folder | Description |
 |---|---|
 | `modrinth_finder_v2.py` | **Main script** — use this one. Search, analyse, and download mods. |
 | `modrinth_finder.py` | Original v1 script — kept for reference. Slower (sequential). |
 | `config.json` | Your mod list and settings. Edit this file. |
 | `requirements.txt` | Python package dependencies (`requests`, `tqdm`). |
 | `setup.bat` | Windows helper — checks Python and installs dependencies. |
-| `CHANGELOG.md` | Version history with performance comparisons. |
+| `CHANGELOG.md` | Version history with performance comparisons and recent fixes. |
 | `README.md` | This file. |
+| `doms/`, `mods/`, `modsDaiki/`, `modsnforge/` | **Mod storage directories** — auto-created when downloading. Safely ignore these folders. |
 
 ---
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.1 — Bug Fixes & UX Improvements
+
+### Fixes
+
+- **Top Parent Link for root mods** — Mods without parents (top-level mods in conflicts) now display their own link in the "Top Parent Link" column instead of blank
+- **Missing dependency resolution** — Alternative mod projects (e.g., "Citadel Unofficial Port") now have their dependencies properly cached and resolved, preventing raw project IDs (like `XjY0RcQj`) from appearing in missing dependencies
+
+### Improvements
+
+- **Stage delineation** — Clear visual separation and timing for each of the 4 stages:
+  ```
+  STAGE 1: SEARCH — Parallel search for X mod names
+  ✓ STAGE 1 COMPLETE: 1.4s (N found, M not found)
+  
+  STAGE 2: VERSIONS — Fetching project metadata and versions
+  ✓ STAGE 2 COMPLETE: 1.0s (N mods, M deps queued)
+  
+  STAGE 3: DEPENDENCIES — Resolving dependency tree (BFS)
+  ✓ STAGE 3 COMPLETE: 1.4s
+  
+  STAGE 4: ANALYSIS — Analyzing compatibility & searching for alternatives
+  ✓ STAGE 4 COMPLETE: 0.0s
+  
+  TOTAL TIME: 3.7s
+  ```
+- Each stage now clearly shows what it's doing and how long it took, making it easy to identify bottlenecks
+
+---
+
 ## v2.0 — Parallel Rewrite
 
 Complete rewrite of `modrinth_finder.py` → `modrinth_finder_v2.py` focused on speed, reliability, and user control.

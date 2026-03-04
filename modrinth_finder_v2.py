@@ -319,6 +319,9 @@ def discover(api, names, ign_set, loader, skip=None):
     seen_titles = set()
     seen_pids = set()
 
+    log(f"\n{SEP}")
+    log(f"STAGE 1: SEARCH — Parallel search for {len(names)} mod names")
+    log(f"{SEP}\n")
     # ── Phase 1: Parallel search ({MAX_WORKERS} threads) ─────────────────
     t_ph1 = time.time()
     found = []  # (name, hit, match_type)
@@ -353,9 +356,13 @@ def discover(api, names, ign_set, loader, skip=None):
             nf.append(name)
             continue
         found.append((name, h, mt))
-    log(f"  Phase 1 (search): {time.time() - t_ph1:.1f}s — {len(found)} found, {len(nf)} not found")
+    t_ph1_end = time.time() - t_ph1
+    log(f"\n✓ STAGE 1 COMPLETE: {t_ph1_end:.1f}s  ({len(found)} found, {len(nf)} not found)\n")
 
     # ── Phase 2: Parallel project + version fetching ──────────────────────
+    log(f"{SEP}")
+    log(f"STAGE 2: VERSIONS — Fetching project metadata and versions")
+    log(f"{SEP}\n")
     def _fetch_mod_data(name, hit, match_type):
         pid = hit.get("project_id") or hit["slug"]
         proj_data = api.proj(pid)
@@ -417,9 +424,13 @@ def discover(api, names, ign_set, loader, skip=None):
             seen_pids.add(dp)
             dep_queue.append((dp, t))
 
-    log(f"  Phase 2 (versions): {time.time() - t_ph2:.1f}s — {len(found)} mods, {len(dep_queue)} deps queued")
+    t_ph2_end = time.time() - t_ph2
+    log(f"\n✓ STAGE 2 COMPLETE: {t_ph2_end:.1f}s  ({len(found)} mods, {len(dep_queue)} deps queued)\n")
 
     # ── Phase 3: BFS dependency resolution ────────────────────────────────
+    log(f"{SEP}")
+    log(f"STAGE 3: DEPENDENCIES — Resolving dependency tree (BFS)")
+    log(f"{SEP}\n")
     t_ph3 = time.time()
     while dep_queue:
         # Bulk-fetch project metadata
@@ -498,7 +509,8 @@ def discover(api, names, ign_set, loader, skip=None):
                     seen_pids.add(dp)
                     dep_queue.append((dp, t))
 
-    log(f"  Phase 3 (deps): {time.time() - t_ph3:.1f}s")
+    t_ph3_end = time.time() - t_ph3
+    log(f"\n✓ STAGE 3 COMPLETE: {t_ph3_end:.1f}s\n")
     return info, nf, deps
 
 
@@ -591,6 +603,23 @@ def analyze(api, info, mcv, loader=None, skip=None):
                     }
                     alts[t] = {"title": alt_title, "slug": alt_slug_real, "url": alt_url, "pid": alt_pid}
                     pid2t[alt_pid] = t
+
+    # ── Ensure alt project dependencies are resolvable ──────────────────────
+    # Collect all dep project IDs from plan items and pre-fetch their metadata
+    # to prevent "XjY0RcQj" (raw ID) from appearing as missing dependencies
+    dep_pids_to_resolve = set()
+    for t, p in plan.items():
+        for d in p.get("deps", []):
+            dp = d.get("project_id")
+            if dp and dp not in pid2t:
+                dep_pids_to_resolve.add(dp)
+
+    # Fetch and cache metadata for all unresolved deps
+    if dep_pids_to_resolve:
+        for dp in dep_pids_to_resolve:
+            pr = api.proj(dp)  # This will be cached by api.proj
+            if pr:
+                pid2t[dp] = pr.get("title", dp)
 
     # ── Conflict detection ────────────────────────────────────────────────
 
@@ -690,12 +719,14 @@ def ptable(rows):
 
 
 def top_parent(t, info):
-    """Trace dep chain to root parent."""
+    """Trace dep chain to root parent. Returns the topmost parent mod's title, or empty if not found."""
     visited = set()
     cur = t
     while cur in info and info[cur].get("par") and cur not in visited:
         visited.add(cur)
         cur = info[cur]["par"]
+    # Return the topmost parent (cur) if it's a real parent (different from t), otherwise return empty
+    # This ensures we only show top parent link for mods involved in dependency chains
     return cur if cur != t and cur in info else ""
 
 
@@ -792,7 +823,7 @@ def show_version(api, info, deps, mcv, plan, conflicts, missing, active, alts=No
             n += 1
             inf = info[t]
             root = top_parent(t, info)
-            rurl = info[root]["url"] if root else ""
+            rurl = info[root]["url"] if root else inf["url"]
             if t in req_detail:
                 issue = "; ".join(req_detail[t])
             elif t not in sup:
@@ -857,7 +888,10 @@ def show(api, info, deps, nf, loader, skip=None):
         return None
 
     # Analyse top candidates (parallel — each MC version analysed concurrently)
-    log(f"\nAnalyzing dep compatibility & searching for alt projects...")
+    log(f"\n{SEP}")
+    log(f"STAGE 4: ANALYSIS \u2014 Analyzing compatibility & searching for alternatives")
+    log(f"{SEP}\n")
+    t_ana = time.time()
     adj, ana = {}, {}
     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(cands))) as pool:
         futs = {pool.submit(analyze, api, info, v, loader, skip): (v, sup) for v, sup in cands}
@@ -1101,11 +1135,14 @@ def main():
     log(f"  Workers: {MAX_WORKERS} threads (cpu_count={os.cpu_count()})")
     info, nf, deps = discover(api, mods, ign_set, loader, skip)
 
-    log(f"\n{SEP}")
     t_ana = time.time()
     result = show(api, info, deps, nf, loader, skip)
-    log(f"\n  Analysis: {time.time() - t_ana:.1f}s")
+    t_ana_end = time.time() - t_ana
+    
     elapsed = time.time() - t0
+    log(f"\n✓ STAGE 4 COMPLETE: {t_ana_end:.1f}s")
+    log(SEP)
+    log(f"TOTAL TIME: {elapsed:.1f}s")
     log(SEP)
     log(f"\nCompleted in {elapsed:.1f}s")
 
